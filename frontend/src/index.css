@@ -63,3 +63,27 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* ── Login page responsive ── */
+@media (max-width: 768px) {
+  .login-container {
+    flex-direction: column !important;
+    max-width: 440px !important;
+    min-height: auto !important;
+  }
+  .login-branding {
+    display: none !important;
+  }
+  .login-form-side {
+    padding: 36px 28px !important;
+  }
+  .login-mobile-logo {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-form-side {
+    padding: 28px 20px !important;
+  }
+}

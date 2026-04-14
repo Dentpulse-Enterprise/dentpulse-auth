@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import LoginPage from "./components/LoginPage";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import StatsCards from "./components/StatsCards";
@@ -7,6 +8,9 @@ import { fetchAdminPanelUsers, updateUserPermission } from "./services/api";
 import { Users, Loader, AlertCircle } from "lucide-react";
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    () => !!localStorage.getItem("access_token")
+  );
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -16,8 +20,8 @@ function App() {
   const usersPerPage = 10;
 
   useEffect(() => {
-    loadUsers();
-  }, []);
+    if (isAuthenticated) loadUsers();
+  }, [isAuthenticated]);
 
   async function loadUsers() {
     setLoading(true);
@@ -54,6 +58,16 @@ function App() {
     setCurrentPage(1);
   }, [searchQuery]);
 
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("access_token");
+    setSidebarOpen(false);
+    setIsAuthenticated(false);
+  };
+
   const handleTogglePermission = async (userId, permKey) => {
     const target = users.find((u) => u.id === userId);
     if (!target) return;
@@ -84,9 +98,13 @@ function App() {
     }
   };
 
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout} />
 
       <TopBar
         searchQuery={searchQuery}

@@ -1,10 +1,31 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 function authHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   const token = localStorage.getItem('access_token');
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
+}
+
+export async function loginWithEmail(email, password) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.error_description || data.msg || 'Invalid email or password');
+  }
+
+  return data;
 }
 
 export async function fetchAdminPanelUsers() {

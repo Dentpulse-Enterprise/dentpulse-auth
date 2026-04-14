@@ -14,7 +14,7 @@ const navItems = [
   { icon: Settings, label: "Settings" },
 ];
 
-export default function Sidebar({ open, onClose }) {
+export default function Sidebar({ open, onClose, onLogout }) {
   return (
     <>
       {open && (
@@ -210,8 +210,8 @@ export default function Sidebar({ open, onClose }) {
               </div>
             </div>
           </div>
-          <a
-            href="#"
+          <button
+            onClick={onLogout}
             style={{
               display: "flex",
               alignItems: "center",
@@ -221,7 +221,10 @@ export default function Sidebar({ open, onClose }) {
               fontSize: 13,
               fontWeight: 500,
               color: "rgba(255,255,255,0.45)",
-              textDecoration: "none",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              width: "100%",
               transition: "all 0.15s",
             }}
             onMouseEnter={(e) => {
@@ -235,7 +238,7 @@ export default function Sidebar({ open, onClose }) {
           >
             <LogOut size={18} />
             <span>Sign Out</span>
-          </a>
+          </button>
         </div>
       </aside>
     </>
