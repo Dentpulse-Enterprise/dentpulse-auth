@@ -1,23 +1,9 @@
-import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import adminPanelRoutes from "./routes/adminPanel.js";
+import "./src/config/env.js";
+import app from "./src/app.js";
+import config from "./src/config/index.js";
 
-const app = express();
-const PORT = parseInt(process.env.PORT, 10) || 6000;
-const HOST = process.env.HOST || "central.auth.backend";
+const { port, host } = config;
 
-app.use(cors());
-app.use(express.json());
-
-// Routes
-app.use("/api/admin-panel", adminPanelRoutes);
-
-// Health check
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
-});
-
-app.listen(PORT, HOST, () => {
-  console.log(`Server running on http://${HOST}:${PORT}`);
+app.listen(port, host, () => {
+  console.log(`Server running on http://${host}:${port}`);
 });

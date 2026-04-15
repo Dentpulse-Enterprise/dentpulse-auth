@@ -1,9 +1,10 @@
 import { supabase } from "../lib/supabase.js";
+import { ApiError } from "../utils/ApiError.js";
 
-export async function requireAuth(req, res, next) {
+export const requireAuth = async (req, _res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing or invalid token" });
+    return next(ApiError.unauthorized("Missing or invalid token"));
   }
 
   const token = authHeader.split(" ")[1];
@@ -14,9 +15,10 @@ export async function requireAuth(req, res, next) {
   } = await supabase.auth.getUser(token);
 
   if (error || !user) {
-    return res.status(401).json({ error: "Invalid or expired token" });
+    return next(ApiError.unauthorized("Invalid or expired token"));
   }
 
   req.user = user;
+  req.token = token;
   next();
-}
+};
