@@ -5,7 +5,14 @@ import TopBar from "./components/TopBar";
 import StatsCards from "./components/StatsCards";
 import UserTable from "./components/UserTable";
 import { fetchAdminPanelUsers, updateUserPermission } from "./services/api";
-import { Users, Loader, AlertCircle } from "lucide-react";
+import { Users, Loader, AlertCircle, Activity, BookOpen, TrendingUp } from "lucide-react";
+
+const SOURCE_FILTERS = [
+  { key: "all", label: "All Sources", icon: Users, color: "#5b4cdb" },
+  { key: "dentpulse", label: "DentPulse Enterprise", icon: Activity, color: "#5b4cdb" },
+  { key: "dentledger", label: "DentLedger", icon: BookOpen, color: "#22b573" },
+  { key: "dentscale", label: "DentScale", icon: TrendingUp, color: "#f0a830" },
+];
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
@@ -17,6 +24,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sourceFilter, setSourceFilter] = useState("all");
   const usersPerPage = 10;
 
   useEffect(() => {
@@ -27,7 +35,7 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAdminPanelUsers();
+      const data = await fetchAdminPanelUsers("all");
       setUsers(data);
     } catch (err) {
       setError(err.message);
@@ -37,15 +45,19 @@ function App() {
   }
 
   const filteredUsers = useMemo(() => {
-    if (!searchQuery) return users;
+    let list = users;
+    if (sourceFilter !== "all") {
+      list = list.filter((u) => u.permissions?.[sourceFilter]);
+    }
+    if (!searchQuery) return list;
     const q = searchQuery.toLowerCase();
-    return users.filter(
+    return list.filter(
       (u) =>
         u.name.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
         (u.clinic && u.clinic.toLowerCase().includes(q))
     );
-  }, [users, searchQuery]);
+  }, [users, searchQuery, sourceFilter]);
 
   const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
   const paginatedUsers = useMemo(() => {
@@ -53,10 +65,10 @@ function App() {
     return filteredUsers.slice(start, start + usersPerPage);
   }, [filteredUsers, currentPage, usersPerPage]);
 
-  // Reset to page 1 when search changes
+  // Reset to page 1 when search or source filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, sourceFilter]);
 
   const handleLogin = () => {
     setIsAuthenticated(true);
@@ -151,7 +163,7 @@ function App() {
                   lineHeight: 1.2,
                 }}
               >
-                User Management
+                Organization App Management
               </h2>
               <p
                 style={{
@@ -167,8 +179,48 @@ function App() {
         </div>
 
         {/* Stats Cards */}
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 20 }}>
           <StatsCards users={users} />
+        </div>
+
+        {/* Source Filter */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            marginBottom: 20,
+            animation: "fadeIn 0.35s ease-out 0.1s both",
+          }}
+        >
+          {SOURCE_FILTERS.map((f) => {
+            const Icon = f.icon;
+            const active = sourceFilter === f.key;
+            return (
+              <button
+                key={f.key}
+                onClick={() => setSourceFilter(f.key)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "9px 14px",
+                  borderRadius: 10,
+                  border: active ? `1px solid ${f.color}` : "1px solid var(--border)",
+                  background: active ? f.color : "#fff",
+                  color: active ? "#fff" : "var(--text-secondary)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  boxShadow: active ? `0 2px 8px ${f.color}33` : "var(--shadow-sm)",
+                  transition: "all 0.15s",
+                }}
+              >
+                <Icon size={15} color={active ? "#fff" : f.color} />
+                {f.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Info Bar */}

@@ -28,37 +28,82 @@ export async function loginWithEmail(email, password) {
   return data;
 }
 
-export async function fetchAdminPanelUsers() {
-  const headers = authHeaders();
+const DENTLEDGER_API_URL = 'https://dentledger.denish-faldu.in/api';
+const DENTSCALE_API_URL = 'https://skmarketing.denish-faldu.in/api';
 
-  const res = await fetch(`${API_BASE_URL}/admin-panel/users`, { headers });
+async function fetchUsersFromSource(url, sourceKey) {
+  const res = await fetch(`${url}/users`, { headers: authHeaders() });
+  const body = await res.json().catch(() => ({}));
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Failed to fetch users (${res.status})`);
+  if (!res.ok || body.status === false) {
+    throw new Error(body.response || body.error || `Failed to fetch users (${res.status})`);
   }
 
-  const data = await res.json();
+  const users = Array.isArray(body.data) ? body.data : [];
 
-  // Map API response to the shape the UI expects
-  return data.map((user) => ({
-    id: user.user_id,
-    name: user.full_name || 'Unknown',
-    email: user.email || '',
-    clinic: user.clinics.length > 0
-      ? user.clinics.map((c) => c.name).join(', ')
-      : user.organization_name || 'No clinic',
-    clinics: user.clinics,
-    organization_name: user.organization_name,
-    avatar_url: user.avatar_url,
-    role: user.role,
-    created_at: user.created_at,
-    permissions: {
-      dentpulse: user.permissions?.dentpulse ?? false,
-      dentledger: user.permissions?.dentledger ?? false,
-      dentscale: user.permissions?.dentscale ?? false,
-    },
-  }));
+  return users.map((user) => {
+    const fullName = [user.name, user.last_name].filter(Boolean).join(' ').trim() || 'Unknown';
+    return {
+      id: user.id,
+      name: fullName,
+      email: user.email || '',
+      clinic: user.company_name || 'No clinic',
+      clinics: user.company_name ? [{ name: user.company_name }] : [],
+      organization_name: user.company_name,
+      phone: user.phone,
+      country: user.country,
+      postal_code: user.postal_code,
+      role: user.role,
+      source: sourceKey,
+      permissions: {
+        dentpulse: sourceKey === 'dentpulse' || (user.permissions?.dentpulse ?? false),
+        dentledger: sourceKey === 'dentledger' || (user.permissions?.dentledger ?? false),
+        dentscale: sourceKey === 'dentscale' || (user.permissions?.dentscale ?? false),
+      },
+    };
+  });
+}
+
+const SOURCE_CONFIG = {
+  dentledger: { url: DENTLEDGER_API_URL, key: 'dentledger' },
+  dentscale: { url: DENTSCALE_API_URL, key: 'dentscale' },
+  dentpulse: { url: API_BASE_URL + '/admin-panel', key: 'dentpulse' },
+};
+
+export async function fetchAdminPanelUsers(source = 'all') {
+  const sources =
+    source === 'all' ? ['dentpulse', 'dentledger', 'dentscale'] : [source];
+
+  const results = await Promise.allSettled(
+    sources.map((s) => fetchUsersFromSource(SOURCE_CONFIG[s].url, SOURCE_CONFIG[s].key))
+  );
+
+  const errors = results.filter((r) => r.status === 'rejected');
+  if (errors.length === results.length) {
+    throw new Error(errors[0].reason?.message || 'Failed to fetch users');
+  }
+
+  const all = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+
+  const merged = new Map();
+  for (const user of all) {
+    const key = user.email?.toLowerCase() || `id:${user.source}:${user.id}`;
+    const existing = merged.get(key);
+    if (existing) {
+      merged.set(key, {
+        ...existing,
+        permissions: {
+          dentpulse: existing.permissions.dentpulse || user.permissions.dentpulse,
+          dentledger: existing.permissions.dentledger || user.permissions.dentledger,
+          dentscale: existing.permissions.dentscale || user.permissions.dentscale,
+        },
+      });
+    } else {
+      merged.set(key, user);
+    }
+  }
+
+  return Array.from(merged.values());
 }
 
 export async function updateUserPermission(userId, payload) {

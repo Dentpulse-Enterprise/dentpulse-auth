@@ -65,7 +65,7 @@ export default function TopBar({ searchQuery, onSearchChange, onOpenSidebar }) {
             <span style={{ color: "var(--text-muted)" }}>Admin</span>
             <ChevronRight size={14} style={{ color: "var(--text-muted)" }} />
             <span style={{ color: "var(--text)", fontWeight: 600 }}>
-              User Management
+              Organization App Management
             </span>
           </nav>
         </div>

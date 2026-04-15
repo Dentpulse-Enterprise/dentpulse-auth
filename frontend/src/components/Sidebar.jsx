@@ -9,7 +9,7 @@ import {
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard" },
-  { icon: Users, label: "User Management", active: true },
+  { icon: Users, label: "Organization App Management", active: true },
   { icon: Shield, label: "Roles & Permissions" },
   { icon: Settings, label: "Settings" },
 ];

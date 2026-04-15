@@ -4,7 +4,8 @@ import cors from "cors";
 import adminPanelRoutes from "./routes/adminPanel.js";
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = parseInt(process.env.PORT, 10) || 6000;
+const HOST = process.env.HOST || "central.auth.backend";
 
 app.use(cors());
 app.use(express.json());
@@ -17,6 +18,6 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Server running on http://${HOST}:${PORT}`);
 });

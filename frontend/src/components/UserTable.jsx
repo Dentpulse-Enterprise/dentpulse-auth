@@ -99,7 +99,7 @@ export default function UserTable({ users, onTogglePermission }) {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={thStyle}>User</th>
+              <th style={thStyle}>Organization</th>
               {permissionConfig.map((p) => (
                 <th key={p.key} style={{ ...thStyle, textAlign: "center" }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
