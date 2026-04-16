@@ -118,6 +118,38 @@ function mergeUsers(allUsers) {
   return Array.from(merged.values());
 }
 
+// ── Users-with-tenants/organizations fetcher ─────────────
+
+async function fetchUsersWithTenants(token) {
+  const url = `${process.env.DENTSCALE_BASE_URL || "https://skmarketing.denish-faldu.in/api"}/users-with-tenants`;
+  const headers = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(url, { headers });
+  const body = await res.json().catch(() => ({}));
+
+  if (!res.ok || body.status === false) {
+    throw new Error(body.response || body.error || "Failed to fetch skMarketing users-with-tenants");
+  }
+
+  return Array.isArray(body.data) ? body.data : [];
+}
+
+async function fetchUsersWithOrganizations(token) {
+  const url = `${process.env.DENTLEDGER_BASE_URL || "https://dentledger.denish-faldu.in/api"}/users-with-organizations`;
+  const headers = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(url, { headers });
+  const body = await res.json().catch(() => ({}));
+
+  if (!res.ok || body.status === false) {
+    throw new Error(body.response || body.error || "Failed to fetch DentLedger users-with-organizations");
+  }
+
+  return Array.isArray(body.data) ? body.data : [];
+}
+
 // ── Exported service ──────────────────────────────────────
 
 export const usersService = {
@@ -170,5 +202,31 @@ export const usersService = {
     if (error) throw ApiError.internal(error.message);
 
     return data;
+  },
+
+  async getUsersWithTenantsAndOrgs(token) {
+    const results = await Promise.allSettled([
+      fetchUsersWithTenants(token),
+      fetchUsersWithOrganizations(token),
+    ]);
+
+    const errors = results.filter((r) => r.status === "rejected");
+    if (errors.length === results.length) {
+      throw ApiError.badGateway(
+        errors[0].reason?.message || "Failed to fetch users with tenants/organizations"
+      );
+    }
+
+    errors.forEach((e) => {
+      console.warn("Failed to fetch from a source:", e.reason?.message);
+    });
+
+    const skMarketingData = results[0].status === "fulfilled" ? results[0].value : [];
+    const dentLedgerData = results[1].status === "fulfilled" ? results[1].value : [];
+
+    return {
+      skMarketing: skMarketingData,
+      dentLedger: dentLedgerData,
+    };
   },
 };

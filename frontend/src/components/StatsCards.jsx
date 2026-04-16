@@ -2,9 +2,9 @@ import { Users, Activity, BookOpen, TrendingUp } from "lucide-react";
 
 export default function StatsCards({ users }) {
   const total = users.length;
-  const dentpulseCount = users.filter((u) => u.permissions.dentpulse).length;
-  const dentledgerCount = users.filter((u) => u.permissions.dentledger).length;
-  const dentscaleCount = users.filter((u) => u.permissions.dentscale).length;
+  const dentpulseCount = users.filter((u) => u.permissions?.dentpulse).length;
+  const dentledgerCount = users.filter((u) => u.permissions?.dentledger).length;
+  const dentscaleCount = users.filter((u) => u.permissions?.dentscale).length;
 
   const stats = [
     {

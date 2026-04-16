@@ -11,6 +11,12 @@ async function request(url, options = {}) {
   const res = await fetch(url, options);
   const body = await res.json().catch(() => ({}));
 
+  if (res.status === 401) {
+    localStorage.removeItem('access_token');
+    window.location.reload();
+    throw new Error('Session expired');
+  }
+
   if (!res.ok) {
     throw new Error(body.error || `Request failed (${res.status})`);
   }
@@ -32,6 +38,18 @@ export async function fetchAdminPanelUsers(source = 'all') {
     : `${API_BASE_URL}/admin-panel/all-users?source=${source}`;
 
   return request(url, { headers: authHeaders() });
+}
+
+export async function fetchUsersWithTenants() {
+  return request(`${API_BASE_URL}/admin-panel/users-with-tenants`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function fetchUsersWithOrg() {
+  return request(`${API_BASE_URL}/organizations/users-with-org`, {
+    headers: authHeaders(),
+  });
 }
 
 export async function updateUserPermission(userId, payload) {

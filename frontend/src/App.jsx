@@ -4,7 +4,7 @@ import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import StatsCards from "./components/StatsCards";
 import UserTable from "./components/UserTable";
-import { fetchAdminPanelUsers, updateUserPermission } from "./services/api";
+import { fetchUsersWithOrg } from "./services/api";
 import { Users, Loader, AlertCircle, Activity, BookOpen, TrendingUp } from "lucide-react";
 
 const SOURCE_FILTERS = [
@@ -18,25 +18,23 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
     () => !!localStorage.getItem("access_token")
   );
-  const [users, setUsers] = useState([]);
+  const [orgData, setOrgData] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
   const [sourceFilter, setSourceFilter] = useState("all");
-  const usersPerPage = 10;
 
   useEffect(() => {
-    if (isAuthenticated) loadUsers();
+    if (isAuthenticated) loadData();
   }, [isAuthenticated]);
 
-  async function loadUsers() {
+  async function loadData() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAdminPanelUsers("all");
-      setUsers(data);
+      const data = await fetchUsersWithOrg();
+      setOrgData(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -44,31 +42,60 @@ function App() {
     }
   }
 
-  const filteredUsers = useMemo(() => {
-    let list = users;
-    if (sourceFilter !== "all") {
-      list = list.filter((u) => u.permissions?.[sourceFilter]);
+  // Flatten all users for StatsCards
+  const allUsers = useMemo(() => {
+    const users = [];
+    for (const item of orgData) {
+      for (const o of item.owners || []) users.push(o);
+      for (const m of item.members || []) users.push(m);
     }
-    if (!searchQuery) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter(
-      (u) =>
-        u.name.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        (u.clinic && u.clinic.toLowerCase().includes(q))
-    );
-  }, [users, searchQuery, sourceFilter]);
+    return users;
+  }, [orgData]);
 
-  const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
-  const paginatedUsers = useMemo(() => {
-    const start = (currentPage - 1) * usersPerPage;
-    return filteredUsers.slice(start, start + usersPerPage);
-  }, [filteredUsers, currentPage, usersPerPage]);
+  // Filter orgs by search and source
+  const filteredOrgData = useMemo(() => {
+    let list = orgData;
 
-  // Reset to page 1 when search or source filter changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, sourceFilter]);
+    // Source filter: only show orgs that have at least one user with that permission
+    if (sourceFilter !== "all") {
+      list = list
+        .map((item) => {
+          const owners = (item.owners || []).filter((u) => u.permissions?.[sourceFilter]);
+          const members = (item.members || []).filter((u) => u.permissions?.[sourceFilter]);
+          if (owners.length === 0 && members.length === 0) return null;
+          return { ...item, owners, members };
+        })
+        .filter(Boolean);
+    }
+
+    // Search filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list
+        .map((item) => {
+          const orgMatch = item.organization?.name?.toLowerCase().includes(q);
+          const matchingOwners = (item.owners || []).filter(
+            (u) =>
+              u.full_name?.toLowerCase().includes(q) ||
+              u.email?.toLowerCase().includes(q)
+          );
+          const matchingMembers = (item.members || []).filter(
+            (u) =>
+              u.full_name?.toLowerCase().includes(q) ||
+              u.email?.toLowerCase().includes(q)
+          );
+          // If org name matches, show all users; otherwise only matching users
+          if (orgMatch) return item;
+          if (matchingOwners.length > 0 || matchingMembers.length > 0) {
+            return { ...item, owners: matchingOwners, members: matchingMembers };
+          }
+          return null;
+        })
+        .filter(Boolean);
+    }
+
+    return list;
+  }, [orgData, searchQuery, sourceFilter]);
 
   const handleLogin = () => {
     setIsAuthenticated(true);
@@ -80,34 +107,46 @@ function App() {
     setIsAuthenticated(false);
   };
 
-  const handleTogglePermission = async (userId, permKey) => {
-    const target = users.find((u) => u.id === userId);
-    if (!target) return;
-    const nextPermissions = {
-      ...target.permissions,
-      [permKey]: !target.permissions[permKey],
-    };
+  // Toggle permission locally (static, no API call for now).
+  // If enabling for a member and owner lacks it, auto-enable owner too.
+  const handleTogglePermission = (userId, permKey, orgId) => {
+    setOrgData((prev) =>
+      prev.map((item) => {
+        if (item.organization?.id !== orgId) return item;
 
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, permissions: nextPermissions } : u))
+        const allPeople = [...(item.owners || []), ...(item.members || [])];
+        const target = allPeople.find((u) => (u.user_id || u.id) === userId);
+        if (!target) return item;
+
+        const newValue = !target.permissions?.[permKey];
+
+        // Collect user IDs that need updating
+        const updateMap = new Map();
+        updateMap.set(userId, { ...target.permissions, [permKey]: newValue });
+
+        // If enabling for a member, auto-enable for owners who lack it
+        if (newValue && target.role !== "owner") {
+          for (const owner of item.owners || []) {
+            const oid = owner.user_id || owner.id;
+            if (!owner.permissions?.[permKey]) {
+              updateMap.set(oid, { ...owner.permissions, [permKey]: true });
+            }
+          }
+        }
+
+        return {
+          ...item,
+          owners: (item.owners || []).map((o) => {
+            const newPerms = updateMap.get(o.user_id || o.id);
+            return newPerms ? { ...o, permissions: newPerms } : o;
+          }),
+          members: (item.members || []).map((m) => {
+            const newPerms = updateMap.get(m.user_id || m.id);
+            return newPerms ? { ...m, permissions: newPerms } : m;
+          }),
+        };
+      })
     );
-
-    try {
-      await updateUserPermission(userId, {
-        name: target.name,
-        email: target.email,
-        clinic: target.clinic,
-        permissions: nextPermissions,
-      });
-    } catch (err) {
-      console.error("Failed to persist permission toggle:", err);
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === userId ? { ...u, permissions: target.permissions } : u
-        )
-      );
-      setError(err.message);
-    }
   };
 
   if (!isAuthenticated) {
@@ -180,7 +219,7 @@ function App() {
 
         {/* Stats Cards */}
         <div style={{ marginBottom: 20 }}>
-          <StatsCards users={users} />
+          <StatsCards users={allUsers} />
         </div>
 
         {/* Source Filter */}
@@ -244,8 +283,8 @@ function App() {
               border: "1px solid var(--border)",
             }}
           >
-            Showing {Math.min((currentPage - 1) * usersPerPage + 1, filteredUsers.length)}-{Math.min(currentPage * usersPerPage, filteredUsers.length)} of {filteredUsers.length} users
-            {searchQuery && ` (filtered from ${users.length})`}
+            {filteredOrgData.length} organization{filteredOrgData.length !== 1 ? "s" : ""} &middot;{" "}
+            {allUsers.length} total users
           </span>
         </div>
 
@@ -268,7 +307,7 @@ function App() {
               style={{ margin: "0 auto 16px", animation: "spin 1s linear infinite" }}
             />
             <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-secondary)" }}>
-              Loading users...
+              Loading organizations...
             </div>
           </div>
         )}
@@ -301,13 +340,13 @@ function App() {
               <AlertCircle size={26} color="#ef4444" />
             </div>
             <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
-              Failed to load users
+              Failed to load organizations
             </div>
             <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 20 }}>
               {error}
             </div>
             <button
-              onClick={loadUsers}
+              onClick={loadData}
               style={{
                 padding: "10px 24px",
                 borderRadius: 10,
@@ -324,128 +363,13 @@ function App() {
           </div>
         )}
 
-        {/* User Table */}
+        {/* Organization Tree */}
         {!loading && !error && (
           <div style={{ animation: "fadeIn 0.4s ease-out 0.25s both" }}>
             <UserTable
-              users={paginatedUsers}
+              orgData={filteredOrgData}
               onTogglePermission={handleTogglePermission}
             />
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  marginTop: 20,
-                  animation: "fadeIn 0.4s ease-out 0.3s both",
-                }}
-              >
-                <button
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    background: currentPage === 1 ? "var(--bg)" : "#fff",
-                    color: currentPage === 1 ? "var(--text-muted)" : "var(--text-secondary)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: currentPage === 1 ? "default" : "pointer",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  First
-                </button>
-                <button
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    background: currentPage === 1 ? "var(--bg)" : "#fff",
-                    color: currentPage === 1 ? "var(--text-muted)" : "var(--text-secondary)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: currentPage === 1 ? "default" : "pointer",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  Prev
-                </button>
-
-                {(() => {
-                  const pages = [];
-                  let start = Math.max(1, currentPage - 2);
-                  let end = Math.min(totalPages, start + 4);
-                  if (end - start < 4) start = Math.max(1, end - 4);
-
-                  for (let i = start; i <= end; i++) {
-                    pages.push(
-                      <button
-                        key={i}
-                        onClick={() => setCurrentPage(i)}
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 8,
-                          border: i === currentPage ? "1px solid var(--primary)" : "1px solid var(--border)",
-                          background: i === currentPage ? "var(--primary)" : "#fff",
-                          color: i === currentPage ? "#fff" : "var(--text-secondary)",
-                          fontSize: 13,
-                          fontWeight: 600,
-                          cursor: "pointer",
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        {i}
-                      </button>
-                    );
-                  }
-                  return pages;
-                })()}
-
-                <button
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    background: currentPage === totalPages ? "var(--bg)" : "#fff",
-                    color: currentPage === totalPages ? "var(--text-muted)" : "var(--text-secondary)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: currentPage === totalPages ? "default" : "pointer",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  Next
-                </button>
-                <button
-                  onClick={() => setCurrentPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    background: currentPage === totalPages ? "var(--bg)" : "#fff",
-                    color: currentPage === totalPages ? "var(--text-muted)" : "var(--text-secondary)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: currentPage === totalPages ? "default" : "pointer",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  Last
-                </button>
-              </div>
-            )}
           </div>
         )}
       </main>

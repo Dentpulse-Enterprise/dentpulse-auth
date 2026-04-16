@@ -17,6 +17,12 @@ export const usersController = {
     sendSuccess(res, users);
   }),
 
+  getUsersWithTenantsAndOrgs: asyncHandler(async (req, res) => {
+    const token = req.token;
+    const data = await usersService.getUsersWithTenantsAndOrgs(token);
+    sendSuccess(res, data);
+  }),
+
   updatePermission: asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const { permission, enabled } = req.body;

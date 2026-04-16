@@ -5,6 +5,7 @@ import { usersController } from "./users.controller.js";
 const router = Router();
 
 router.get("/all-users", requireAuth, usersController.getAllUsers);
+router.get("/users-with-tenants", requireAuth, usersController.getUsersWithTenantsAndOrgs);
 router.get("/users", requireAuth, usersController.getDentpulseUsers);
 router.patch(
   "/users/:userId/permissions",
